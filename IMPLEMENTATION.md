@@ -14,8 +14,8 @@ Flow: USGS poller → `raw.usgs` → normalize + persist + dedup → `events` �
 |------|-------------|--------|
 | 1 | Skeleton & infra | ✅ Done (2026-08-11) |
 | 2 | Persistence | ✅ Done (2026-08-11) |
-| 3 | Ingestion | ⬜ Not started |
-| 4 | Normalization | ⬜ Not started |
+| 3 | Ingestion | ✅ Done (2026-08-11) |
+| 4 | Normalization | 🔄 In progress (2026-08-12) — tests written, implementations stubbed |
 | 5 | Matching | ⬜ Not started |
 | 6 | Dispatch | ⬜ Not started |
 | 7 | REST API + security | ⬜ Not started |
@@ -43,11 +43,32 @@ Delivered:
 - `V2__seed_demo_data.sql` — realistic dummy data: 5 users (mix of `USER`/`ADMIN`, one `DISABLED`), their channel configs, 6 alert rules, 10 USGS earthquake events, 8 deliveries across `SENT`/`FAILED`/`DEAD_LETTERED`/`PENDING`. API keys stored as SHA-256 hashes (D24); plaintext demo keys documented in the delivery notes, not committed to the schema.
 - Entities under `com.petsparc5.alerts.persistence.entity`; repositories under `…persistence.repository`. Plain ID fields (UUID/Long) instead of JPA associations. Lombok integrated; accessors added per class only when consumed.
 
-### 3. Ingestion — ⬜ Not started
+### 3. Ingestion — ✅ Done
 `UsgsPoller` (`@Scheduled`) fetches USGS GeoJSON, publishes each quake keyed by USGS event id to `raw.usgs`.
 
-### 4. Normalization — ⬜ Not started
+Delivered:
+- `FeedClient<T>` — pull-based source contract (`fetch()`); `SourcePoller<T>` — template base owning fetch→map→publish and default error handling (`safeExecute`/`onPollError`), subclasses supply `toRawEvents`.
+- `usgs.dto` — `UsgsFeature`/`UsgsProperties`/`UsgsGeometry`/`UsgsFeatureCollection` records mapping the GeoJSON summary feed, `@JsonIgnoreProperties(ignoreUnknown = true)`.
+- `UsgsFeedClient` — `RestClient`-backed `FeedClient<UsgsFeatureCollection>`, feed URL from `ingestion.usgs.feed-url`; throws `IllegalStateException` on a null/structurally invalid body.
+- `UsgsPoller` — `SourcePoller<UsgsFeatureCollection>`, `@Scheduled(fixedDelayString = "${ingestion.usgs.poll-interval-ms}")`; skips features with a null id (logged), serializes each valid feature as the `RawEvent` payload.
+- `RawEvent`/`RawEventPublisher` — publishes to `raw.<source>` keyed by `source:externalId`.
+- `InfrastructureConfiguration` — manual `RestClient.Builder` and `ObjectMapper` beans (D28 gap).
+- Tests: `UsgsFeedClientTest` (`MockRestServiceServer`), `UsgsPollerTest`, `RawEventPublisherTest` (Mockito, no Spring context).
+
+### 4. Normalization — 🔄 In progress
 Consume `raw.usgs` → canonical `Event` (`DISASTER`/`EARTHQUAKE`, severity = magnitude), enforce unique `dedup_key`, persist, publish `events`.
+
+TDD red phase committed: tests written first, production classes compile with stubbed (`UnsupportedOperationException`) bodies, all normalization tests currently failing by design.
+
+- `EventNormalizer<T>` — mapping contract (raw DTO → canonical `Event`), mirrors `FeedClient<T>`; kept as a pure, Spring-free unit to match the D23 test-pyramid priority on the mapper.
+- `NormalizedEvent` — wire record for the `events` topic, decoupled from the `Event` JPA entity.
+- `EventPublisher` — will serialize `Event` → `NormalizedEvent` JSON and publish to `events` keyed by `dedup_key`. *(stubbed)*
+- `usgs.UsgsEventNormalizer implements EventNormalizer<UsgsFeature>` — will map magnitude/place/coordinates/time to the canonical `Event`. *(stubbed)*
+- `usgs.UsgsRawEventListener` — `@KafkaListener(topics = "raw.usgs")`; will deserialize, normalize, check `existsByDedupKey`, persist, and republish. *(stubbed)*
+- `Event` entity gained `@Getter @Builder @NoArgsConstructor @AllArgsConstructor` (Lombok, D26) now that normalization is its first consumer.
+- Tests: `UsgsEventNormalizerTest` (pure JUnit/AssertJ), `EventPublisherTest`, `UsgsRawEventListenerTest` (Mockito, no Spring context) — same no-Spring-context style as the ingestion tests.
+
+Next: implement the stubbed methods to turn the suite green.
 
 ### 5. Matching — ⬜ Not started
 Consume `events` → active `EARTHQUAKE` rules (min magnitude, optional region/bbox) → `NotificationRequest` per matched (user, channel) → `notifications`.
