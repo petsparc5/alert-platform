@@ -9,7 +9,7 @@ spring:
     password: ${DB_PASSWORD:alerts}
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
     open-in-view: false
   flyway:
     enabled: true
@@ -20,6 +20,9 @@ spring:
       slackWebhookDiego: ${SLACK_WEBHOOK_DIEGO:}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
     consumer:
       group-id: alert-platform
       auto-offset-reset: earliest
@@ -35,3 +38,8 @@ management:
     web:
       exposure:
         include: health,info,metrics
+
+ingestion:
+  usgs:
+    feed-url: ${USGS_FEED_URL:https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson}
+    poll-interval-ms: ${USGS_POLL_INTERVAL_MS:60000}

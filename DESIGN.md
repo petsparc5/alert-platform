@@ -50,6 +50,9 @@ No further product input is available — all decisions are made by us and recor
 | D15 | Persistence stack | PROPOSED | Spring Data JPA + Flyway migrations; JSONB for flexible payloads/criteria |
 | D16 | Local dev + test infra | PROPOSED | Docker Compose (Postgres + Kafka KRaft); Testcontainers in tests |
 | D17 | Poller scaling | PROPOSED | Spring `@Scheduled` now; add ShedLock when >1 instance |
+| D29 | Developer alerting on ingestion failures | DEFERRED | When polls fail repeatedly or the bad-data rate (e.g. null IDs) exceeds a threshold, trigger an alert to developers (Slack, email, PagerDuty). Currently only logged. Pattern TBD: threshold-based counter, circuit-breaker, or Actuator health indicator |
+| D30 | Ingestion retry logic | DEFERRED | On transient poll failure, retry with exponential back-off before marking the cycle as failed. Currently the scheduler simply waits for the next fixed interval. Applies to both HTTP fetch failures (`UsgsFeedClient`) and Kafka publish failures (`RawEventPublisher`) |
+| D28 | Spring Boot 4.0 auto-configuration gaps | OPEN | Spring Boot 4.0 extracts integration auto-configs into dedicated modules; `spring-kafka` alone no longer registers `KafkaTemplate` (fixed: switched to `spring-boot-starter-kafka`), and `RestClient.Builder` is no longer auto-configured by `spring-boot-starter-web` (fixed: manual bean in `RestClientConfiguration`). Flyway bean-ordering vs. Hibernate validation is also broken (`ddl-auto` set to `none` as workaround). **Future action**: investigate whether Spring Boot 4.0 provides proper starters for each of these and whether the Flyway ordering regression has been addressed |
 
 ---
 

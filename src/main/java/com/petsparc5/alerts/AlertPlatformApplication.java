@@ -2,6 +2,7 @@ package com.petsparc5.alerts;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Entry point for the Alert Platform, a modular monolith that ingests external
@@ -9,6 +10,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * notifications across pluggable channels.
  */
 @SpringBootApplication
+@EnableScheduling
 public class AlertPlatformApplication {
 
     /**
