@@ -7,15 +7,36 @@
     injected system-reminders, attachment references, and tool results.
 #>
 param(
-    [string]$InputPath  = "C:\Users\petsp\.claude\projects\C--Users-petsp-IdeaProjects-Sonrisa\b9a1c1f2-9895-4099-9458-953caba86942.jsonl",
-    [string]$OutputPath = "C:\Users\petsp\IdeaProjects\Sonrisa\conversations\design_with_claude.md"
+    [int]$Part,
+    [string]$InputPath,
+    [string]$OutputPath,
+    [string]$Title,
+    [string]$ProjectLogDir = "C:\Users\petsp\.claude\projects\C--Users-petsp-IdeaProjects-Sonrisa",
+    [string]$ConversationsDir = "C:\Users\petsp\IdeaProjects\Sonrisa\conversations"
 )
+
+if (-not $InputPath) {
+    $latest = Get-ChildItem -LiteralPath $ProjectLogDir -Filter *.jsonl -ErrorAction Stop |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $latest) { throw "No .jsonl session logs found in $ProjectLogDir" }
+    $InputPath = $latest.FullName
+}
+
+if (-not $OutputPath) {
+    $suffix = if ($Part) { "_part$Part" } else { "_part1" }
+    $OutputPath = Join-Path $ConversationsDir "implementation_with_claude$suffix.md"
+}
+
+if (-not $Title) {
+    $partLabel = if ($Part) { " Part $Part" } else { "" }
+    $Title = "Implementation Conversation$partLabel - Alert Platform (Sonrisa)"
+}
 
 $dir = Split-Path -Parent $OutputPath
 if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
 
 $sb = New-Object System.Text.StringBuilder
-[void]$sb.AppendLine("# Design Conversation - Alert Platform (Sonrisa)")
+[void]$sb.AppendLine("# $Title")
 [void]$sb.AppendLine("")
 [void]$sb.AppendLine("Verbatim transcript exported from the Claude Code session log via ``export-transcript.ps1``.")
 [void]$sb.AppendLine("")
@@ -24,7 +45,7 @@ $sb = New-Object System.Text.StringBuilder
 
 $lastWho = $null
 
-foreach ($line in Get-Content -LiteralPath $InputPath) {
+foreach ($line in Get-Content -LiteralPath $InputPath -Encoding UTF8) {
     if ([string]::IsNullOrWhiteSpace($line)) { continue }
     try { $obj = $line | ConvertFrom-Json -ErrorAction Stop } catch { continue }
     if ($obj.type -ne 'user' -and $obj.type -ne 'assistant') { continue }

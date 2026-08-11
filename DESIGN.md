@@ -43,7 +43,10 @@ No further product input is available — all decisions are made by us and recor
 | D21 | Deduplication mechanism | DECIDED | Correctness via unique constraint on `events.dedup_key` (`source:externalId`); idempotent upsert in normalization. **No app-side cache in the demo** — see §12.2 |
 | D22 | Caching layer | DEFERRED | **Redis** post-demo for shared dedup set, active-rule cache, and rate-limiting. No Caffeine/in-process cache in the demo — see §12.2 |
 | D23 | Testing stack | DECIDED | JUnit 5 + AssertJ + Mockito, Spring Boot test slices, Testcontainers (Postgres/Kafka), MockWebServer for USGS, MockMvc for API — see §13 |
-| D24 | Demo auth simplification | DECIDED | Demo uses **HTTP Basic + roles** for speed; JWT (D13) remains the target and swaps in post-demo |
+| D24 | Demo auth simplification | DECIDED | Auth is a **plain API-key check**: client sends a key, we hash it (SHA-256) and match against `users.api_key_hash`; the user's `role` drives authorization. No sessions/tokens. **JWT (D13) is a future exploration, not a committed target**; `password_hash` deferred until then |
+| D25 | Primary key strategy | DECIDED | `users.id` is a **UUID** (exposed via the public REST API); all other tables use **`BIGINT GENERATED ALWAYS AS IDENTITY`**. FKs referencing users are UUID |
+| D26 | Boilerplate reduction | DECIDED | **Lombok** integrated for accessors/equals/hashCode etc.; annotations added per class only when the generated members are actually used |
+| D27 | Kafka availability / replication | DEFERRED | Demo runs a **single broker**, so all topics are replication factor 1 (higher is impossible with one broker). A **multi-broker cluster** (e.g. 3 brokers, `replication.factor=3`, `min.insync.replicas=2`) can be explored in the future for durability/availability — post-demo infra change, not a knob on the single node |
 | D15 | Persistence stack | PROPOSED | Spring Data JPA + Flyway migrations; JSONB for flexible payloads/criteria |
 | D16 | Local dev + test infra | PROPOSED | Docker Compose (Postgres + Kafka KRaft); Testcontainers in tests |
 | D17 | Poller scaling | PROPOSED | Spring `@Scheduled` now; add ShedLock when >1 instance |
@@ -132,12 +135,14 @@ Category discriminator + typed criteria (stored as JSONB), matched by per-catego
 - `DISASTER` — types (earthquake/flood/…), region/bbox, minimum severity
 
 ### Tables (initial)
-- `users` — id, email, status, created_at
-- `channel_configs` — user_id, type (`EMAIL`/`SLACK`/…), config JSONB (address / webhook url), enabled — supports multiple channels per user
-- `alert_rules` — id, user_id, category, criteria JSONB, active
+PK convention: `users.id` UUID; all others `BIGINT` identity (D25). Enums stored as `VARCHAR` + `CHECK` constraints. Three JSONB columns only: `channel_configs.config`, `alert_rules.criteria`, `events.payload`.
+
+- `users` — id (UUID), email (unique), status (`ACTIVE`/`DISABLED`), role (`USER`/`ADMIN`), api_key_hash (SHA-256, unique), created_at
+- `channel_configs` — id, user_id, type (`EMAIL`/`SLACK_WEBHOOK`/…), config JSONB (address / webhook url), enabled, created_at — supports multiple channels per user
+- `alert_rules` — id, user_id, category, criteria JSONB, active, created_at
 - `events` — id, dedup_key (unique), category, type, source, severity, occurred_at, ingested_at, payload JSONB
-- `notification_deliveries` — id, event_id, user_id, channel_type, status, attempts, error, sent_at
-- `sources` — id, type, config JSONB, poll_interval, enabled
+- `notification_deliveries` — id, event_id, user_id, channel_type, status (`PENDING`/`SENT`/`FAILED`/`DEAD_LETTERED`), attempts, error, sent_at, created_at
+- `sources` — id, type, config JSONB, poll_interval, enabled *(deferred; not created for the demo)*
 
 ---
 
@@ -193,35 +198,11 @@ Launch with **Incoming Webhook** (user supplies a webhook URL — minimal). To g
 
 ---
 
-## 11. Demo build plan (planned — not started)
+## 11. Demo build plan
 
-Scope: prove the full pipeline for **USGS earthquakes → email + Slack**, REST admin, due tomorrow. Nothing beyond that.
+The demo build order, step-by-step progress, demo-scope simplifications, cut line, and risk register now live in **[IMPLEMENTATION.md](IMPLEMENTATION.md)**. This document remains the record of *decisions and rationale*; the implementation file tracks *what has been built*.
 
-Flow: USGS poller → `raw.usgs` → normalize + persist + dedup → `events` → match against alert rules → `notifications` → dispatch to Email (SMTP/Mailpit) + Slack (webhook), record delivery → REST API to manage it all.
-
-Build order:
-1. **Skeleton & infra** — Spring Boot 4.0 deps (web, security, data-jpa, kafka, mail, validation, actuator, flyway, postgres; test: testcontainers, spring-kafka-test); `docker-compose.yml` (Postgres, Kafka KRaft, Mailpit); `application.yml`.
-2. **Persistence** — Flyway `V1__init.sql`: `users`, `channel_configs`, `alert_rules`, `events`, `notification_deliveries` (no `sources` table for demo). JPA entities + repositories.
-3. **Ingestion** — `UsgsPoller` (`@Scheduled`) fetches USGS GeoJSON, publishes each quake keyed by USGS event id to `raw.usgs`.
-4. **Normalization** — consume `raw.usgs` → canonical `Event` (`DISASTER`/`EARTHQUAKE`, severity = magnitude), enforce unique `dedup_key`, persist, publish `events`.
-5. **Matching** — consume `events` → active `EARTHQUAKE` rules (min magnitude, optional region/bbox) → `NotificationRequest` per matched (user, channel) → `notifications`.
-6. **Dispatch** — consume `notifications` → `NotificationChannel` strategy (`EmailChannel` SMTP, `SlackChannel` webhook), retry + `notifications.DLT`, write `notification_deliveries`.
-7. **REST API + security** — Spring Security JWT, roles `USER`/`ADMIN`. User: manage own channel configs + alert rules. Admin: list events, deliveries, users.
-8. **Tests** — Testcontainers slice tests per module + one end-to-end (sample USGS payload → assert delivery record written).
-
-Demo-scope simplifications (noted, not permanent):
-- USGS poller config hardcoded (no `sources` table).
-- Single in-process app; immediate delivery only (no digests).
-- Dedup via DB unique constraint only — **no app-side cache** (Redis deferred, D22).
-- **HTTP Basic + roles** instead of JWT (D24); JWT is the target (D13).
-
-### 11.1 Demo cut line
-**In:** pipeline ingest→dispatch, both channels (email via Mailpit, Slack webhook), minimal REST to create a user/rule and view events + deliveries, and the two priority tests (§13).
-**Out (post-demo):** full test pyramid, JWT, Redis, event partitioning/retention, `sources` table, additional feeds.
-
-**Risk register:**
-- Spring Boot 4.0 / Java 25 ecosystem friction → fallback to Java 21 + Spring Boot 3.5 (D7).
-- Six topics + consumers are the bulk of the work; kept because it's the demo's whole point.
+Scope (unchanged): prove the full pipeline for **USGS earthquakes → email + Slack**, REST admin. Flow: USGS poller → `raw.usgs` → normalize + persist + dedup → `events` → match against alert rules → `notifications` → dispatch to Email (SMTP/Mailpit) + Slack (webhook), record delivery → REST API to manage it all.
 
 ---
 
