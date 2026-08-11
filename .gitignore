@@ -1,5 +1,9 @@
 target/
 !.mvn/wrapper/maven-wrapper.jar
+
+### Secrets ###
+.env
+.env.example
 !**/src/main/**/target/
 !**/src/test/**/target/
 .kotlin
