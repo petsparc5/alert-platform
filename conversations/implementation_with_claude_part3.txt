@@ -1,0 +1,299 @@
+ ▐▛███▜▌   Claude Code v2.1.228
+▝▜█████▛▘  Sonnet 5 · Claude Pro
+  ▘▘ ▝▝    ~\IdeaProjects\Sonrisa
+
+   Tackle your toughest work with Opus 5. Switch anytime with /model.
+   +1 more · /status
+
+❯ Based on the implementation.md, we have finished the Ingestion layer last     
+  time, and now we can move on to implementing the normalisation layer. Update  
+  the document based on this information, and for more context check out the    
+  design.md file. You should follow the TDD approach, and write the tests with  
+  empty implementations first.                                                  
+
+  Searched for 4 patterns, read 24 files, ran 1 shell command (ctrl+o to expand)
+
+● Update(src\main\java\com\petsparc5\alerts\persistence\entity\Event.java)
+  ⎿  Added 8 lines
+       8  import jakarta.persistence.GenerationType;
+       9  import jakarta.persistence.Id;
+      10  import jakarta.persistence.Table;
+      11 +import lombok.AllArgsConstructor;                              
+      12 +import lombok.Builder;                                         
+      13 +import lombok.Getter;                                          
+      14 +import lombok.NoArgsConstructor;                               
+      15  import org.hibernate.annotations.CreationTimestamp;
+      16  import org.hibernate.annotations.JdbcTypeCode;
+      17  import org.hibernate.type.SqlTypes;
+     ...
+      24   * windows never persist or notify twice. The original source p
+          ayload is kept as
+      25   * JSONB.
+      26   */
+      27 +@Getter                                                        
+      28 +@Builder                                                       
+      29 +@NoArgsConstructor                                             
+      30 +@AllArgsConstructor                                            
+      31  @Entity
+      32  @Table(name = "events")
+      33  public class Event {
+
+● Now the normalization production classes (stubbed for TDD red phase):
+
+● Write(src\main\java\com\petsparc5\alerts\normalization\EventNormalizer.java)
+  ⎿  Wrote 21 lines to
+     src\main\java\com\petsparc5\alerts\normalization\EventNormalizer.java
+       1 package com.petsparc5.alerts.normalization;
+       2 
+       3 import com.petsparc5.alerts.persistence.entity.Event;
+       4 
+       5 /**
+         ad into a
+       7  * canonical {@link Event}.
+       8  *
+       9  * @param <T> the type of the deserialized raw payload
+      10  */
+     … +13 lines (ctrl+o to expand)
+
+● Write(src\main\java\com\petsparc5\alerts\normalization\NormalizedEvent.java)
+  ⎿  Wrote 22 lines to
+     src\main\java\com\petsparc5\alerts\normalization\NormalizedEvent.java
+       1 package com.petsparc5.alerts.normalization;
+       2 
+       3 import com.petsparc5.alerts.persistence.entity.AlertCategory;
+       5 import java.time.OffsetDateTime;
+       6 
+       7 /**
+       8  * Wire representation of a canonical event published to the {@c
+       9  * topic, decoupled from the {@link com.petsparc5.alerts.persist
+         ence.entity.Event}
+      10  * persistence entity.
+     … +17 lines (ctrl+o to expand)
+
+● Write(src\main\java\com\petsparc5\alerts\normalization\EventPublisher.java)
+  ⎿  Wrote 40 lines to
+     src\main\java\com\petsparc5\alerts\normalization\EventPublisher.java
+       1 package com.petsparc5.alerts.normalization;
+       2 
+       3 import com.fasterxml.jackson.databind.ObjectMapper;
+       4 import com.petsparc5.alerts.persistence.entity.Event;
+       5 import org.springframework.kafka.core.KafkaTemplate;
+       7 
+       8 /**
+       9  * Publishes canonical {@link Event}s to the unified {@code even
+         ts} Kafka
+      10  * topic, keyed by {@code dedup_key}.
+     … +37 lines (ctrl+o to expand)
+
+● Write(src\main\java\com\petsparc5\alerts\normalization\usgs\UsgsEventNormalize
+       r.java)
+  ⎿  Wrote 30 lines to src\main\java\com\petsparc5\alerts\normalization\usg
+     s\UsgsEventNormalizer.java
+       1 package com.petsparc5.alerts.normalization.usgs;
+       2 
+       3 import com.petsparc5.alerts.ingestion.usgs.dto.UsgsFeature;
+       5 import com.petsparc5.alerts.persistence.entity.Event;
+       6 import org.springframework.stereotype.Component;
+       7 
+       8 /**
+         category
+      10  * {@code DISASTER}, type {@code EARTHQUAKE}, and severity equal
+          to the
+     … +25 lines (ctrl+o to expand)
+
+● Write(src\main\java\com\petsparc5\alerts\normalization\usgs\UsgsRawEventListen
+       er.java)
+  ⎿  Wrote 53 lines to src\main\java\com\petsparc5\alerts\normalization\usg
+     s\UsgsRawEventListener.java
+       1 package com.petsparc5.alerts.normalization.usgs;
+       2 
+       3 import com.fasterxml.jackson.databind.ObjectMapper;
+       4 import com.petsparc5.alerts.normalization.EventPublisher;
+       5 import com.petsparc5.alerts.persistence.repository.EventReposito
+       6 import lombok.extern.slf4j.Slf4j;
+       7 import org.springframework.kafka.annotation.KafkaListener;
+       8 import org.springframework.stereotype.Component;
+       9 
+      10 /**
+     … +53 lines (ctrl+o to expand)
+
+● Now the tests.
+
+● Write(src\test\java\com\petsparc5\alerts\normalization\usgs\UsgsEventNormalize
+       rTest.java)
+  ⎿  Wrote 83 lines to src\test\java\com\petsparc5\alerts\normalization\usg
+     s\UsgsEventNormalizerTest.java
+       1 package com.petsparc5.alerts.normalization.usgs;
+       2 
+       3 import com.petsparc5.alerts.ingestion.usgs.dto.UsgsFeature;
+       4 import com.petsparc5.alerts.ingestion.usgs.dto.UsgsGeometry;
+       5 import com.petsparc5.alerts.ingestion.usgs.dto.UsgsProperties;
+       6 import com.petsparc5.alerts.persistence.entity.AlertCategory;
+       7 import com.petsparc5.alerts.persistence.entity.Event;
+       8 import org.junit.jupiter.api.Test;
+       9 
+      10 import java.time.Instant;
+     … +85 lines (ctrl+o to expand)
+
+● Write(src\test\java\com\petsparc5\alerts\normalization\EventPublisherTest.java
+       )
+  ⎿  Wrote 79 lines to src\test\java\com\petsparc5\alerts\normalization\Eve
+     ntPublisherTest.java
+       1 package com.petsparc5.alerts.normalization;
+       2 
+       3 import com.fasterxml.jackson.databind.ObjectMapper;
+       4 import com.petsparc5.alerts.persistence.entity.AlertCategory;
+       5 import com.petsparc5.alerts.persistence.entity.Event;
+       6 import org.junit.jupiter.api.BeforeEach;
+       7 import org.junit.jupiter.api.Test;
+       8 import org.junit.jupiter.api.extension.ExtendWith;
+       9 import org.mockito.ArgumentCaptor;
+      10 import org.mockito.Captor;
+     … +74 lines (ctrl+o to expand)
+
+● Write(src\test\java\com\petsparc5\alerts\normalization\usgs\UsgsRawEventListen
+       erTest.java)
+  ⎿  Wrote 94 lines to src\test\java\com\petsparc5\alerts\normalization\usg
+     s\UsgsRawEventListenerTest.java
+       1 package com.petsparc5.alerts.normalization.usgs;
+       2 
+       3 import com.fasterxml.jackson.databind.ObjectMapper;
+       4 import com.petsparc5.alerts.ingestion.usgs.dto.UsgsFeature;
+       5 import com.petsparc5.alerts.normalization.EventPublisher;
+       7 import com.petsparc5.alerts.persistence.entity.Event;
+       8 import com.petsparc5.alerts.persistence.repository.EventReposito
+         ry;
+       9 import org.junit.jupiter.api.BeforeEach;
+      10 import org.junit.jupiter.api.Test;
+     … +93 lines (ctrl+o to expand)
+
+● Now update IMPLEMENTATION.md to reflect ingestion completion and normalization
+  kickoff.
+
+● Update(IMPLEMENTATION.md)
+  ⎿  Added 2 lines, removed 2 lines
+      14  |------|-------------|--------|
+      15  | 1 | Skeleton & infra | ✅ Done (2026-08-11) |
+      16  | 2 | Persistence | ✅ Done (2026-08-11) |
+      17 -| 3 | Ingestion | ⬜ Not started |                             
+      18 -| 4 | Normalization | ⬜ Not started |                         
+      17 +| 3 | Ingestion | ✅ Done (2026-08-11) |                       
+      18 +| 4 | Normalization | 🔄 In progress (2026-08-12) — tests writt
+         +en, implementations stubbed |                                  
+      19  | 5 | Matching | ⬜ Not started |
+      20  | 6 | Dispatch | ⬜ Not started |
+      21  | 7 | REST API + security | ⬜ Not started |
+
+● Update(IMPLEMENTATION.md)
+  ⎿  Added 23 lines, removed 2 lines
+      43  - `V2__seed_demo_data.sql` — realistic dummy data: 5 users (mix
+           of `USER`/`ADMIN`, one `DISABLED`), their channel configs, 6 a
+          lert rules, 10 USGS earthquake events, 8 deliveries across `SEN
+          T`/`FAILED`/`DEAD_LETTERED`/`PENDING`. API keys stored as SHA-2
+          56 hashes (D24); plaintext demo keys documented in the delivery
+           notes, not committed to the schema.
+      44  - Entities under `com.petsparc5.alerts.persistence.entity`; rep
+          ositories under `…persistence.repository`. Plain ID fields (UUI
+          D/Long) instead of JPA associations. Lombok integrated; accesso
+          rs added per class only when consumed.
+      45  
+      46 -### 3. Ingestion — ⬜ Not started                              
+      46 +### 3. Ingestion — ✅ Done                                     
+      47  `UsgsPoller` (`@Scheduled`) fetches USGS GeoJSON, publishes eac
+          h quake keyed by USGS event id to `raw.usgs`.
+      48  
+      49 -### 4. Normalization — ⬜ Not started                          
+      49 +Delivered:                                                     
+      50 +- `FeedClient<T>` — pull-based source contract (`fetch()`); `So
+         +urcePoller<T>` — template base owning fetch→map→publish and def
+         +ault error handling (`safeExecute`/`onPollError`), subclasses s
+         +upply `toRawEvents`.                                           
+      51 +- `usgs.dto` — `UsgsFeature`/`UsgsProperties`/`UsgsGeometry`/`U
+         +sgsFeatureCollection` records mapping the GeoJSON summary feed,
+         + `@JsonIgnoreProperties(ignoreUnknown = true)`.                
+      52 +- `UsgsFeedClient` — `RestClient`-backed `FeedClient<UsgsFeatur
+         +eCollection>`, feed URL from `ingestion.usgs.feed-url`; throws 
+         +`IllegalStateException` on a null/structurally invalid body.   
+      53 +- `UsgsPoller` — `SourcePoller<UsgsFeatureCollection>`, `@Sched
+         +uled(fixedDelayString = "${ingestion.usgs.poll-interval-ms}")`;
+         + skips features with a null id (logged), serializes each valid 
+         +feature as the `RawEvent` payload.                             
+      54 +- `RawEvent`/`RawEventPublisher` — publishes to `raw.<source>` 
+         +keyed by `source:externalId`.                                  
+      55 +- `InfrastructureConfiguration` — manual `RestClient.Builder` a
+         +nd `ObjectMapper` beans (D28 gap).                             
+      56 +- Tests: `UsgsFeedClientTest` (`MockRestServiceServer`), `UsgsP
+         +ollerTest`, `RawEventPublisherTest` (Mockito, no Spring context
+         +).                                                             
+      57 +                                                               
+      58 +### 4. Normalization — 🔄 In progress                          
+      59  Consume `raw.usgs` → canonical `Event` (`DISASTER`/`EARTHQUAKE`
+          , severity = magnitude), enforce unique `dedup_key`, persist, p
+          ublish `events`.
+      60  
+      61 +TDD red phase committed: tests written first, production classe
+         +s compile with stubbed (`UnsupportedOperationException`) bodies
+         +, all normalization tests currently failing by design.         
+      62 +                                                               
+      63 +- `EventNormalizer<T>` — mapping contract (raw DTO → canonical 
+         +`Event`), mirrors `FeedClient<T>`; kept as a pure, Spring-free 
+         +unit to match the D23 test-pyramid priority on the mapper.     
+      64 +- `NormalizedEvent` — wire record for the `events` topic, decou
+         +pled from the `Event` JPA entity.                              
+      65 +- `EventPublisher` — will serialize `Event` → `NormalizedEvent`
+         + JSON and publish to `events` keyed by `dedup_key`. *(stubbed)*
+      66 +- `usgs.UsgsEventNormalizer implements EventNormalizer<UsgsFeat
+         +ure>` — will map magnitude/place/coordinates/time to the canoni
+         +cal `Event`. *(stubbed)*                                       
+      67 +- `usgs.UsgsRawEventListener` — `@KafkaListener(topics = "raw.u
+         +sgs")`; will deserialize, normalize, check `existsByDedupKey`, 
+         +persist, and republish. *(stubbed)*                            
+      68 +- `Event` entity gained `@Getter @Builder @NoArgsConstructor @A
+         +llArgsConstructor` (Lombok, D26) now that normalization is its 
+         +first consumer.                                                
+      69 +- Tests: `UsgsEventNormalizerTest` (pure JUnit/AssertJ), `Event
+         +PublisherTest`, `UsgsRawEventListenerTest` (Mockito, no Spring 
+         +context) — same no-Spring-context style as the ingestion tests.
+      70 +                                                               
+      71 +Next: implement the stubbed methods to turn the suite green.   
+      72 +                                                               
+      73  ### 5. Matching — ⬜ Not started
+      74  Consume `events` → active `EARTHQUAKE` rules (min magnitude, op
+          tional region/bbox) → `NotificationRequest` per matched (user, 
+          channel) → `notifications`.
+      75  
+
+● Now let's compile and run the new test suite to confirm the expected red state
+  (compiles, tests fail as designed).
+  Ran 1 shell command (ctrl+o to expand)
+
+● All 12 tests compile and fail as expected in the TDD red phase — every failure
+  traces back to the intentional UnsupportedOperationException stubs,
+  confirming the tests are correctly wired against the real production classes.
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+● Good — existing ingestion tests are unaffected. Everything's compiled and
+  confirmed in the correct red state.
+
+  Done:
+  - Updated IMPLEMENTATION.md: marked Ingestion ✅ Done with a delivered-notes
+  summary, moved Normalization to 🔄 In progress, documented the new classes and
+  the TDD red-phase status.
+  - Added the normalization production skeleton (EventNormalizer<T>,
+  NormalizedEvent, EventPublisher, usgs.UsgsEventNormalizer,
+  usgs.UsgsRawEventListener), mirroring the ingestion layer's style — mapping
+  logic kept Spring-free per DESIGN.md's testing priority. All logic-bearing
+  methods throw UnsupportedOperationException (not yet implemented).
+  - Added Lombok (@Getter @Builder @NoArgsConstructor @AllArgsConstructor) to
+  the Event entity, since normalization is its first consumer.
+  - Wrote the full test suites first: UsgsEventNormalizerTest,
+  EventPublisherTest, UsgsRawEventListenerTest — 12 tests, all currently red
+  against the stubs (verified via mvn test), matching the ingestion tests'
+  no-Spring-context, Mockito-based style. Ingestion's own 13 tests still pass
+  unaffected.
+
+  Next step is filling in the four stubbed method bodies to turn the suite green
+  — say the word when you want that done.
+
+✻ Cogitated for 5m 42s
